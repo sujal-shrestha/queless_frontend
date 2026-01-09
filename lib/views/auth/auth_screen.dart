@@ -21,7 +21,7 @@ class _AuthScreenState extends State<AuthScreen> {
   final TextEditingController _staffPasswordController = TextEditingController();
 
   bool _isLoading = false;
-  String? _errorText; // ✅ inline error
+  String? _errorText;
 
   @override
   void dispose() {
@@ -35,7 +35,7 @@ class _AuthScreenState extends State<AuthScreen> {
   void _switchRole(bool staff) {
     setState(() {
       isStaff = staff;
-      _errorText = null; // ✅ clear error when switching
+      _errorText = null;
     });
   }
 
@@ -43,20 +43,15 @@ class _AuthScreenState extends State<AuthScreen> {
     final v = value?.trim() ?? '';
     if (v.isEmpty) return 'ID is required';
 
-    // ✅ Username rule (same as backend): 3-20 chars letters/numbers/_/-
     final usernameRegex = RegExp(r'^[a-zA-Z0-9_-]{3,20}$');
-    if (!usernameRegex.hasMatch(v)) {
-      return 'Invalid ID format';
-    }
+    if (!usernameRegex.hasMatch(v)) return 'Invalid ID format';
 
-    // ✅ Optional: Enforce prefix for your UI (S... for user, ST... for staff)
     if (!isStaff && !v.startsWith('S')) {
       return 'User ID should start with "S" (e.g., S2024001)';
     }
     if (isStaff && !v.startsWith('ST')) {
       return 'Staff ID should start with "ST" (e.g., ST2024001)';
     }
-
     return null;
   }
 
@@ -77,31 +72,47 @@ class _AuthScreenState extends State<AuthScreen> {
     });
 
     final id = isStaff ? _staffIdController.text.trim() : _userIdController.text.trim();
-    final password = isStaff
-        ? _staffPasswordController.text.trim()
-        : _userPasswordController.text.trim();
+    final password = isStaff ? _staffPasswordController.text.trim() : _userPasswordController.text.trim();
     final role = isStaff ? 'staff' : 'user';
 
-    final result = await ApiService.login(id: id, password: password, role: role);
+    Map<String, dynamic> result = {};
 
-    if (!mounted) return;
+    try {
+      debugPrint('LOGIN -> role=$role id=$id');
+      result = await ApiService.login(id: id, password: password, role: role);
+      debugPrint('LOGIN RESPONSE -> $result');
 
-    setState(() => _isLoading = false);
+      if (!mounted) return;
 
-    if (result['success'] == true) {
-      // ✅ optional: clear error + go home
-      setState(() => _errorText = null);
-      Navigator.pushReplacementNamed(context, '/home');
-    } else {
-      // ✅ inline error (looks cleaner than SnackBar for login)
+      if (result['success'] == true) {
+        setState(() => _errorText = null);
+        Navigator.pushReplacementNamed(context, '/home');
+      } else {
+        final msg = (result['message'] ?? 'Login failed').toString();
+        setState(() => _errorText = msg);
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(msg)),
+        );
+      }
+    } catch (e, st) {
+      debugPrint('LOGIN EXCEPTION -> $e');
+      debugPrint('$st');
+
+      if (!mounted) return;
+
       setState(() {
-        _errorText = result['message'] ?? 'Login failed';
+        _errorText = 'Login error: $e';
       });
 
-      // still show snackbar if you want (optional)
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(result['message'] ?? 'Login failed')),
+        SnackBar(content: Text('Login error: $e')),
       );
+    } finally {
+      // ✅ ALWAYS stop loading no matter what happens
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
     }
   }
 
@@ -113,7 +124,6 @@ class _AuthScreenState extends State<AuthScreen> {
       body: SafeArea(
         child: Column(
           children: [
-            // Green header
             Container(
               padding: const EdgeInsets.fromLTRB(24, 24, 24, 20),
               decoration: const BoxDecoration(
@@ -130,7 +140,6 @@ class _AuthScreenState extends State<AuthScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // App title
                   Row(
                     children: [
                       Container(
@@ -139,10 +148,7 @@ class _AuthScreenState extends State<AuthScreen> {
                           color: Colors.white.withOpacity(0.2),
                           borderRadius: BorderRadius.circular(12),
                         ),
-                        child: const Icon(
-                          Icons.monitor_heart_rounded,
-                          color: Colors.white,
-                        ),
+                        child: const Icon(Icons.monitor_heart_rounded, color: Colors.white),
                       ),
                       const SizedBox(width: 10),
                       const Column(
@@ -168,8 +174,6 @@ class _AuthScreenState extends State<AuthScreen> {
                     ],
                   ),
                   const SizedBox(height: 20),
-
-                  // Feature chips
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: const [
@@ -181,10 +185,7 @@ class _AuthScreenState extends State<AuthScreen> {
                 ],
               ),
             ),
-
             const SizedBox(height: 16),
-
-            // White card with tabs & form
             Expanded(
               child: SingleChildScrollView(
                 padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
@@ -204,7 +205,6 @@ class _AuthScreenState extends State<AuthScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      // segmented tabs
                       Container(
                         padding: const EdgeInsets.all(4),
                         decoration: BoxDecoration(
@@ -257,7 +257,6 @@ class _AuthScreenState extends State<AuthScreen> {
                         ),
                       ),
                       const SizedBox(height: 24),
-
                       Text(
                         isStaff ? 'Staff Login' : 'User Login',
                         style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
@@ -271,7 +270,6 @@ class _AuthScreenState extends State<AuthScreen> {
                       ),
                       const SizedBox(height: 16),
 
-                      // ✅ Inline error message
                       if (_errorText != null) ...[
                         Container(
                           padding: const EdgeInsets.all(12),
@@ -348,8 +346,6 @@ class _AuthScreenState extends State<AuthScreen> {
                         ),
                       ),
                       const SizedBox(height: 16),
-
-                      // signup link
                       Row(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
@@ -389,10 +385,7 @@ class _FeatureChip extends StatelessWidget {
   final IconData icon;
   final String label;
 
-  const _FeatureChip({
-    required this.icon,
-    required this.label,
-  });
+  const _FeatureChip({required this.icon, required this.label});
 
   @override
   Widget build(BuildContext context) {
