@@ -1,19 +1,26 @@
-import '../../core/constants/api_constants.dart';
-import '../../core/network/api_client.dart';
+// lib/data/services/venue_service.dart
+import 'dart:convert';
+import 'package:http/http.dart' as http;
 import '../models/venue_model.dart';
 
 class VenueService {
-  final ApiClient _client = ApiClient();
+  static const String baseUrl = 'http://10.0.2.2:5001'; // emulator -> backend
 
   Future<List<VenueModel>> fetchVenues({String search = ''}) async {
-    final q = search.trim();
-    final url = q.isEmpty
-        ? '${ApiConstants.baseUrl}/api/venues'
-        : '${ApiConstants.baseUrl}/api/venues?search=$q';
+    final uri = Uri.parse('$baseUrl/api/venues')
+        .replace(queryParameters: search.trim().isEmpty ? null : {'search': search.trim()});
 
-    final data = await _client.get(url);
+    final res = await http.get(uri, headers: {
+      'Accept': 'application/json',
+    });
 
-    final list = (data['venues'] as List? ?? []);
-    return list.map((e) => VenueModel.fromJson(e)).toList();
+    if (res.statusCode < 200 || res.statusCode >= 300) {
+      throw Exception('Failed: ${res.statusCode} ${res.body}');
+    }
+
+    final decoded = jsonDecode(res.body);
+    if (decoded is! List) throw Exception('Invalid response');
+
+    return decoded.map((e) => VenueModel.fromJson(e as Map<String, dynamic>)).toList();
   }
 }
