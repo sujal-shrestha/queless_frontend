@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
-import '../../main.dart';
+import '../booking/select_service_screen.dart';
 import '../history/booking_history_screen.dart';
 import '../../viewmodels/booking_history_viewmodel.dart';
+import '../profile/profile_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -15,54 +16,43 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   int _currentIndex = 0;
 
-  void _toast(String msg) {
-    appMessengerKey.currentState?.clearSnackBars();
-    appMessengerKey.currentState?.showSnackBar(
-      SnackBar(content: Text(msg), duration: const Duration(milliseconds: 800)),
-    );
-  }
-
-  void _openBooking() {
-    _toast('Opening booking...');
-
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      Navigator.of(context).pushNamed('/select-service');
-    });
+  // ✅ Switch tabs (used by Quick Action: Book Appointment)
+  void _goToBookingTab() {
+    setState(() => _currentIndex = 1);
   }
 
   @override
   Widget build(BuildContext context) {
     final primary = Theme.of(context).primaryColor;
 
-    final Widget body = switch (_currentIndex) {
-      0 => _HomeTab(primary: primary, onBook: _openBooking, onToast: _toast),
-      2 => const _TabPage(title: 'Queue', icon: Icons.query_stats_rounded),
-      3 => ChangeNotifierProvider(
-          create: (_) => BookingHistoryViewModel(),
-          child: const BookingHistoryScreen(),
-        ),
-      4 => const _TabPage(title: 'Profile', icon: Icons.person_rounded),
-      _ => _HomeTab(primary: primary, onBook: _openBooking, onToast: _toast),
-    };
-
     return Scaffold(
-      body: SafeArea(child: body),
+      body: SafeArea(
+        // ✅ Keeps each tab state alive (no rebuild/reset when switching tabs)
+        child: IndexedStack(
+          index: _currentIndex,
+          children: [
+            _HomeTab(primary: primary, onBook: _goToBookingTab),
+
+            // ✅ BOOK TAB (no pushNamed!)
+            const SelectServiceScreen(isTab: true),
+
+            const _TabPage(title: 'Queue', icon: Icons.query_stats_rounded),
+
+            ChangeNotifierProvider(
+              create: (_) => BookingHistoryViewModel(),
+              child: const BookingHistoryScreen(),
+            ),
+
+            const ProfileScreen(),
+          ],
+        ),
+      ),
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: _currentIndex,
-        onTap: (index) {
-          _toast('Nav tapped: $index');
-
-          if (index == 1) {
-            _openBooking();
-            return;
-          }
-
-          setState(() => _currentIndex = index);
-        },
+        type: BottomNavigationBarType.fixed,
         selectedItemColor: primary,
         unselectedItemColor: Colors.grey,
-        type: BottomNavigationBarType.fixed,
+        onTap: (index) => setState(() => _currentIndex = index), // ✅ just switch tab
         items: const [
           BottomNavigationBarItem(icon: Icon(Icons.home_filled), label: 'Home'),
           BottomNavigationBarItem(icon: Icon(Icons.event_note_rounded), label: 'Book'),
@@ -78,12 +68,10 @@ class _HomeScreenState extends State<HomeScreen> {
 class _HomeTab extends StatelessWidget {
   final Color primary;
   final VoidCallback onBook;
-  final void Function(String) onToast;
 
   const _HomeTab({
     required this.primary,
     required this.onBook,
-    required this.onToast,
   });
 
   @override
@@ -106,52 +94,36 @@ class _HomeTab extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text(
-                'HOME SCREEN (V3)',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 12,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-              const SizedBox(height: 10),
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: const [
-                      Text('Welcome back,', style: TextStyle(color: Colors.white70, fontSize: 14)),
+                      Text(
+                        'Welcome back,',
+                        style: TextStyle(color: Colors.white70, fontSize: 14),
+                      ),
                       SizedBox(height: 4),
                       Text(
                         'Sujal Shrestha',
-                        style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w600),
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 20,
+                          fontWeight: FontWeight.w600,
+                        ),
                       ),
                     ],
                   ),
-                  InkWell(
-                    borderRadius: BorderRadius.circular(40),
-                    onTap: () => onToast('Bell tapped'),
-                    child: Stack(
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.all(8),
-                          decoration: const BoxDecoration(
-                            color: Colors.white24,
-                            shape: BoxShape.circle,
-                          ),
-                          child: const Icon(Icons.notifications_none_rounded, color: Colors.white),
-                        ),
-                        Positioned(
-                          right: 6,
-                          top: 6,
-                          child: Container(
-                            width: 8,
-                            height: 8,
-                            decoration: const BoxDecoration(color: Colors.red, shape: BoxShape.circle),
-                          ),
-                        ),
-                      ],
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(0.18),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(
+                      Icons.notifications_none_rounded,
+                      color: Colors.white,
                     ),
                   ),
                 ],
@@ -159,11 +131,23 @@ class _HomeTab extends StatelessWidget {
               const SizedBox(height: 20),
               Row(
                 children: const [
-                  _TopStatCard(label: 'Appointments', value: '1', icon: Icons.event_available_rounded),
+                  _TopStatCard(
+                    label: 'Appointments',
+                    value: '1',
+                    icon: Icons.event_available_rounded,
+                  ),
                   SizedBox(width: 12),
-                  _TopStatCard(label: 'Queue Number', value: '12', icon: Icons.confirmation_number_rounded),
+                  _TopStatCard(
+                    label: 'Queue Number',
+                    value: '12',
+                    icon: Icons.confirmation_number_rounded,
+                  ),
                   SizedBox(width: 12),
-                  _TopStatCard(label: 'Est. Wait', value: '15 mins', icon: Icons.access_time_rounded),
+                  _TopStatCard(
+                    label: 'Est. Wait',
+                    value: '15 mins',
+                    icon: Icons.access_time_rounded,
+                  ),
                 ],
               ),
             ],
@@ -202,7 +186,11 @@ class _HomeTab extends StatelessWidget {
                             ),
                             child: const Text(
                               'Active',
-                              style: TextStyle(color: Color(0xFF129C4A), fontSize: 12, fontWeight: FontWeight.w600),
+                              style: TextStyle(
+                                color: Color(0xFF129C4A),
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                              ),
                             ),
                           ),
                           const Spacer(),
@@ -210,9 +198,15 @@ class _HomeTab extends StatelessWidget {
                         ],
                       ),
                       const SizedBox(height: 12),
-                      const Text('Dr. Emily Chen', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600)),
+                      const Text(
+                        'Dr. Emily Chen',
+                        style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+                      ),
                       const SizedBox(height: 2),
-                      const Text('General Practitioner', style: TextStyle(color: Colors.grey, fontSize: 13)),
+                      const Text(
+                        'General Practitioner',
+                        style: TextStyle(color: Colors.grey, fontSize: 13),
+                      ),
                       const SizedBox(height: 12),
                       Row(
                         children: const [
@@ -234,9 +228,13 @@ class _HomeTab extends StatelessWidget {
                         ),
                         child: Row(
                           children: const [
-                            Expanded(child: _QueueInfoItem(title: 'Your Queue Number', value: 'A-12')),
+                            Expanded(
+                              child: _QueueInfoItem(title: 'Your Queue Number', value: 'A-12'),
+                            ),
                             SizedBox(width: 12),
-                            Expanded(child: _QueueInfoItem(title: 'People Ahead', value: '4')),
+                            Expanded(
+                              child: _QueueInfoItem(title: 'People Ahead', value: '4'),
+                            ),
                           ],
                         ),
                       ),
@@ -247,9 +245,11 @@ class _HomeTab extends StatelessWidget {
                         child: ElevatedButton(
                           style: ElevatedButton.styleFrom(
                             backgroundColor: primary,
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(10),
+                            ),
                           ),
-                          onPressed: () => onToast('Live Queue tapped'),
+                          onPressed: () {},
                           child: const Text('View Live Queue'),
                         ),
                       ),
@@ -257,20 +257,23 @@ class _HomeTab extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(height: 24),
-                const Text('Quick Actions', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
+                const Text(
+                  'Quick Actions',
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                ),
                 const SizedBox(height: 12),
                 Row(
                   children: [
                     _QuickActionCard(
                       icon: Icons.event_available_rounded,
                       label: 'Book Appointment',
-                      onTap: onBook,
+                      onTap: onBook, // ✅ switches to tab 1
                     ),
                     const SizedBox(width: 12),
                     _QuickActionCard(
                       icon: Icons.query_stats_rounded,
                       label: 'Queue Status',
-                      onTap: () => onToast('Queue Status tapped'),
+                      onTap: () {},
                     ),
                   ],
                 ),
@@ -311,7 +314,11 @@ class _TabPage extends StatelessWidget {
           ),
           child: Text(
             title,
-            style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w700),
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 20,
+              fontWeight: FontWeight.w700,
+            ),
           ),
         ),
         Expanded(
@@ -321,7 +328,10 @@ class _TabPage extends StatelessWidget {
               children: [
                 Icon(icon, size: 58, color: primary),
                 const SizedBox(height: 10),
-                Text('$title Page', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
+                Text(
+                  '$title Page',
+                  style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                ),
               ],
             ),
           ),
@@ -352,9 +362,19 @@ class _TopStatCard extends StatelessWidget {
           children: [
             Icon(icon, color: Colors.white, size: 20),
             const SizedBox(height: 8),
-            Text(value, style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600)),
+            Text(
+              value,
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 18,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
             const SizedBox(height: 2),
-            Text(label, style: const TextStyle(color: Colors.white70, fontSize: 11)),
+            Text(
+              label,
+              style: const TextStyle(color: Colors.white70, fontSize: 11),
+            ),
           ],
         ),
       ),
