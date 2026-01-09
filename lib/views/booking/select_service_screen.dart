@@ -1,6 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../viewmodels/venue_viewmodel.dart';
+import 'booking_flow_args.dart';
+import 'widgets/booking_progress_bar.dart';
+
+const kGreen = Color(0xFF65BF61);
 
 class SelectServiceScreen extends StatefulWidget {
   const SelectServiceScreen({super.key});
@@ -12,13 +16,12 @@ class SelectServiceScreen extends StatefulWidget {
 class _SelectServiceScreenState extends State<SelectServiceScreen> {
   final _search = TextEditingController();
   String? selectedVenueId;
+  String? selectedVenueName;
 
   @override
   void initState() {
     super.initState();
-    Future.microtask(() {
-      context.read<VenueViewModel>().loadVenues();
-    });
+    Future.microtask(() => context.read<VenueViewModel>().loadVenues());
   }
 
   @override
@@ -27,27 +30,51 @@ class _SelectServiceScreenState extends State<SelectServiceScreen> {
     super.dispose();
   }
 
+  void _continue() {
+    if (selectedVenueId == null || selectedVenueName == null) return;
+
+    final draft = BookingDraft(
+      venueId: selectedVenueId!,
+      venueName: selectedVenueName!,
+    );
+
+    Navigator.pushNamed(context, '/choose-branch', arguments: draft);
+  }
+
   @override
   Widget build(BuildContext context) {
     final vm = context.watch<VenueViewModel>();
-    final primary = Theme.of(context).primaryColor;
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text("Book Appointment"),
+        title: const Text('Book Appointment'),
+        backgroundColor: kGreen,
+        elevation: 0,
         leading: IconButton(
           icon: const Icon(Icons.arrow_back),
           onPressed: () => Navigator.pop(context),
         ),
-        backgroundColor: const Color(0xFF7CD39A),
-        elevation: 0,
       ),
       body: Column(
         children: [
+          // Progress area like your UI
+          Container(
+            width: double.infinity,
+            color: kGreen,
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+            child: const BookingProgressBar(step: 1),
+          ),
+
           const SizedBox(height: 12),
-          const Text(
-            "Select Service",
-            style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+          const Padding(
+            padding: EdgeInsets.symmetric(horizontal: 16),
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: Text(
+                'Select Service',
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+              ),
+            ),
           ),
           const SizedBox(height: 12),
 
@@ -56,11 +83,9 @@ class _SelectServiceScreenState extends State<SelectServiceScreen> {
             child: TextField(
               controller: _search,
               decoration: InputDecoration(
-                hintText: "Search venue...",
+                hintText: 'Search venue...',
                 prefixIcon: const Icon(Icons.search),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
               ),
               onChanged: (v) => vm.loadVenues(search: v),
             ),
@@ -75,10 +100,10 @@ class _SelectServiceScreenState extends State<SelectServiceScreen> {
                   return const Center(child: CircularProgressIndicator());
                 }
                 if (vm.error != null) {
-                  return Center(child: Text("Error: ${vm.error}"));
+                  return Center(child: Text(vm.error!));
                 }
                 if (vm.venues.isEmpty) {
-                  return const Center(child: Text("No venues found"));
+                  return const Center(child: Text('No venues found'));
                 }
 
                 return ListView.builder(
@@ -89,7 +114,12 @@ class _SelectServiceScreenState extends State<SelectServiceScreen> {
                     final isSelected = selectedVenueId == v.id;
 
                     return GestureDetector(
-                      onTap: () => setState(() => selectedVenueId = v.id),
+                      onTap: () {
+                        setState(() {
+                          selectedVenueId = v.id;
+                          selectedVenueName = v.name;
+                        });
+                      },
                       child: Container(
                         margin: const EdgeInsets.only(bottom: 12),
                         padding: const EdgeInsets.all(14),
@@ -97,36 +127,37 @@ class _SelectServiceScreenState extends State<SelectServiceScreen> {
                           color: Colors.white,
                           borderRadius: BorderRadius.circular(14),
                           border: Border.all(
-                            color: isSelected ? primary : Colors.grey.shade300,
+                            color: isSelected ? kGreen : Colors.grey.shade300,
                             width: isSelected ? 2 : 1,
                           ),
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.black.withOpacity(0.04),
-                              blurRadius: 8,
-                              offset: const Offset(0, 4),
-                            ),
-                          ],
                         ),
                         child: Row(
                           children: [
-                            const CircleAvatar(
-                              backgroundColor: Color(0xFFEFF7F1),
-                              child: Icon(Icons.apartment, color: Colors.green),
+                            // ✅ Logo
+                            Container(
+                              width: 54,
+                              height: 34,
+                              alignment: Alignment.centerLeft,
+                              child: v.logoUrl.isEmpty
+                                  ? const Icon(Icons.apartment, color: kGreen)
+                                  : Image.network(
+                                      v.logoUrl,
+                                      fit: BoxFit.contain,
+                                      errorBuilder: (_, __, ___) =>
+                                          const Icon(Icons.apartment, color: kGreen),
+                                    ),
                             ),
                             const SizedBox(width: 12),
+
                             Expanded(
                               child: Text(
                                 v.name,
-                                style: const TextStyle(
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.w600,
-                                ),
+                                style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
                               ),
                             ),
+
                             if (isSelected)
-                              const Icon(Icons.check_circle,
-                                  color: Colors.green),
+                              const Icon(Icons.check_circle, color: kGreen),
                           ],
                         ),
                       ),
@@ -144,22 +175,12 @@ class _SelectServiceScreenState extends State<SelectServiceScreen> {
               height: 48,
               child: ElevatedButton(
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF7CD39A),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
+                  backgroundColor: kGreen,
+                  disabledBackgroundColor: kGreen.withOpacity(0.35),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                 ),
-                onPressed: selectedVenueId == null
-                    ? null
-                    : () {
-                        // Next screen will be Choose Branch
-                        Navigator.pushNamed(
-                          context,
-                          "/choose-branch",
-                          arguments: selectedVenueId,
-                        );
-                      },
-                child: const Text("Continue"),
+                onPressed: selectedVenueId == null ? null : _continue,
+                child: const Text('Continue'),
               ),
             ),
           )
