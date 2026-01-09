@@ -4,13 +4,15 @@ import 'package:provider/provider.dart';
 import 'views/auth/auth_screen.dart';
 import 'views/auth/signup_screen.dart';
 import 'views/home/home_screen.dart';
+
 import 'views/booking/select_service_screen.dart';
 import 'views/booking/choose_branch_screen.dart';
-import 'viewmodels/venue_viewmodel.dart';
+import 'views/booking/select_date_screen.dart';
+import 'views/booking/select_time_screen.dart';
+import 'views/booking/booking_confirmed_screen.dart';
 
-final GlobalKey<NavigatorState> appNavigatorKey = GlobalKey<NavigatorState>();
-final GlobalKey<ScaffoldMessengerState> appMessengerKey =
-    GlobalKey<ScaffoldMessengerState>();
+import 'viewmodels/venue_viewmodel.dart';
+import 'viewmodels/profile_viewmodel.dart';
 
 void main() {
   runApp(const QueueLessApp());
@@ -24,10 +26,9 @@ class QueueLessApp extends StatelessWidget {
     return MultiProvider(
       providers: [
         ChangeNotifierProvider(create: (_) => VenueViewModel()),
+        ChangeNotifierProvider(create: (_) => ProfileViewModel()),
       ],
       child: MaterialApp(
-        navigatorKey: appNavigatorKey,
-        scaffoldMessengerKey: appMessengerKey,
         title: 'QueueLess',
         debugShowCheckedModeBanner: false,
         theme: ThemeData(
@@ -44,8 +45,7 @@ class QueueLessApp extends StatelessWidget {
               borderRadius: BorderRadius.circular(10),
               borderSide: BorderSide.none,
             ),
-            contentPadding:
-                const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+            contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
           ),
         ),
         initialRoute: '/auth',
@@ -53,8 +53,12 @@ class QueueLessApp extends StatelessWidget {
           '/auth': (context) => const AuthScreen(),
           '/signup': (context) => const SignupScreen(),
           '/home': (context) => const HomeScreen(),
+
           '/select-service': (context) => const SelectServiceScreen(),
           '/choose-branch': (context) => const ChooseBranchScreen(),
+          '/select-date': (context) => const SelectDateScreen(),
+          '/select-time': (context) => const SelectTimeScreen(),
+          '/booking-confirmed': (context) => const BookingConfirmedScreen(),
         },
       ),
     );
