@@ -1,18 +1,18 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import 'viewmodels/home_viewmodel.dart';
+import 'viewmodels/venue_viewmodel.dart';
+import 'viewmodels/profile_viewmodel.dart';
+
 import 'views/auth/auth_screen.dart';
 import 'views/auth/signup_screen.dart';
 import 'views/home/home_screen.dart';
+import 'views/queue/live_queue_view.dart';
 
+
+// ✅ Single-screen booking flow (kept)
 import 'views/booking/select_service_screen.dart';
-import 'views/booking/choose_branch_screen.dart';
-import 'views/booking/select_date_screen.dart';
-import 'views/booking/select_time_screen.dart';
-import 'views/booking/booking_confirmed_screen.dart';
-
-import 'viewmodels/venue_viewmodel.dart';
-import 'viewmodels/profile_viewmodel.dart';
 
 void main() {
   runApp(const QueueLessApp());
@@ -21,10 +21,13 @@ void main() {
 class QueueLessApp extends StatelessWidget {
   const QueueLessApp({super.key});
 
+  static const kGreen = Color(0xFF65BF61);
+
   @override
   Widget build(BuildContext context) {
     return MultiProvider(
       providers: [
+        ChangeNotifierProvider(create: (_) => HomeViewModel()),
         ChangeNotifierProvider(create: (_) => VenueViewModel()),
         ChangeNotifierProvider(create: (_) => ProfileViewModel()),
       ],
@@ -33,11 +36,9 @@ class QueueLessApp extends StatelessWidget {
         debugShowCheckedModeBanner: false,
         theme: ThemeData(
           fontFamily: 'Roboto',
-          primaryColor: const Color(0xFF16C25A),
+          primaryColor: kGreen,
           scaffoldBackgroundColor: const Color(0xFFF5F7FB),
-          colorScheme: ColorScheme.fromSeed(
-            seedColor: const Color(0xFF16C25A),
-          ),
+          colorScheme: ColorScheme.fromSeed(seedColor: kGreen),
           inputDecorationTheme: InputDecorationTheme(
             filled: true,
             fillColor: const Color(0xFFF3F4F6),
@@ -48,17 +49,19 @@ class QueueLessApp extends StatelessWidget {
             contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
           ),
         ),
-        initialRoute: '/auth',
-        routes: {
-          '/auth': (context) => const AuthScreen(),
-          '/signup': (context) => const SignupScreen(),
-          '/home': (context) => const HomeScreen(),
 
-          '/select-service': (context) => const SelectServiceScreen(),
-          '/choose-branch': (context) => const ChooseBranchScreen(),
-          '/select-date': (context) => const SelectDateScreen(),
-          '/select-time': (context) => const SelectTimeScreen(),
-          '/booking-confirmed': (context) => const BookingConfirmedScreen(),
+        // ✅ Start here
+        initialRoute: '/auth',
+
+        // ✅ Only the routes you still use
+        routes: {
+          '/auth': (_) => const AuthScreen(),
+          '/signup': (_) => const SignupScreen(),
+          '/home': (_) => const HomeScreen(),
+          '/queue': (_) => const LiveQueueView(),
+
+          // ✅ Optional: keep ONLY if somewhere you still do Navigator.pushNamed('/select-service')
+          '/select-service': (_) => const SelectServiceScreen(),
         },
       ),
     );
