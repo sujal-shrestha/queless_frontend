@@ -4,20 +4,20 @@ import 'package:http/http.dart' as http;
 
 import 'api_service.dart';
 
-class VenueService {
+class BranchService {
   static const Duration _timeout = Duration(seconds: 12);
 
-  static Future<Map<String, dynamic>> fetchVenues({String? search}) async {
-    final query = (search != null && search.trim().isNotEmpty)
-        ? '?search=${Uri.encodeComponent(search.trim())}'
-        : '';
-
-    final url = Uri.parse('${ApiService.baseUrl}/api/venues$query');
+  /// GET /api/venues/:venueId/branches
+  /// Expected backend formats supported:
+  /// 1) { "branches": [ ... ] }
+  /// 2) { "data": [ ... ] }
+  /// 3) [ ... ]
+  static Future<Map<String, dynamic>> fetchBranches(String venueId) async {
+    final url = Uri.parse('${ApiService.baseUrl}/api/venues/$venueId/branches');
 
     try {
-      // ✅ Debug
       // ignore: avoid_print
-      print('[VENUES] GET $url');
+      print('[BRANCHES] GET $url');
 
       final res = await http
           .get(
@@ -29,16 +29,19 @@ class VenueService {
           .timeout(_timeout);
 
       // ignore: avoid_print
-      print('[VENUES] status=${res.statusCode}');
+      print('[BRANCHES] status=${res.statusCode}');
       // ignore: avoid_print
-      print('[VENUES] body=${res.body}');
+      print('[BRANCHES] body=${res.body}');
 
       final parsed = _decode(res.body);
 
       if (res.statusCode >= 200 && res.statusCode < 300) {
-        // ✅ backend format: { "venues": [ ... ] }
-        if (parsed is Map && parsed['venues'] is List) {
-          return {'success': true, 'data': parsed['venues']};
+        // ✅ supports: {branches: []}, {data: []}, or []
+        if (parsed is Map && parsed['branches'] is List) {
+          return {'success': true, 'data': parsed['branches']};
+        }
+        if (parsed is Map && parsed['data'] is List) {
+          return {'success': true, 'data': parsed['data']};
         }
         if (parsed is List) {
           return {'success': true, 'data': parsed};
@@ -50,7 +53,7 @@ class VenueService {
         'success': false,
         'message': (parsed is Map && parsed['message'] != null)
             ? parsed['message'].toString()
-            : 'Failed to load venues (${res.statusCode})',
+            : 'Failed to load branches (${res.statusCode})',
       };
     } on TimeoutException {
       return {'success': false, 'message': 'Request timed out'};
