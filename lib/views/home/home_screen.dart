@@ -1,10 +1,17 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:queless_app/viewmodels/profile_viewmodel.dart';
+
+import '../../viewmodels/home_viewmodel.dart';
+import '../../viewmodels/venue_viewmodel.dart';
 
 import '../booking/select_service_screen.dart';
 import '../history/booking_history_screen.dart';
 import '../../viewmodels/booking_history_viewmodel.dart';
 import '../profile/profile_screen.dart';
+
+// ✅ NEW: your real queue screen
+import '../queue/live_queue_view.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -16,34 +23,73 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   int _currentIndex = 0;
 
-  // ✅ Switch tabs (used by Quick Action: Book Appointment)
+  static const primary = Color(0xFF65BF61);
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      context.read<HomeViewModel>().loadHome();
+    });
+  }
+
   void _goToBookingTab() {
     setState(() => _currentIndex = 1);
+    context.read<VenueViewModel>().loadVenues();
+  }
+
+  void _goToQueueTab() {
+    setState(() => _currentIndex = 2);
+  }
+
+  void _onTabTap(int index) {
+    debugPrint('[HOME] tab tapped index=$index');
+
+    setState(() => _currentIndex = index);
+
+    if (index == 0) {
+      debugPrint('[HOME] calling loadHome');
+      context.read<HomeViewModel>().loadHome();
+    }
+    if (index == 1) {
+      debugPrint('[HOME] calling loadVenues');
+      context.read<VenueViewModel>().loadVenues();
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    final primary = Theme.of(context).primaryColor;
-
     return Scaffold(
       body: SafeArea(
-        // ✅ Keeps each tab state alive (no rebuild/reset when switching tabs)
         child: IndexedStack(
           index: _currentIndex,
           children: [
-            _HomeTab(primary: primary, onBook: _goToBookingTab),
+            _HomeTab(
+              primary: primary,
+              onBook: _goToBookingTab,
+              onQueue: _goToQueueTab, // ✅ new
+            ),
 
-            // ✅ BOOK TAB (no pushNamed!)
+            // ✅ BOOK TAB
             const SelectServiceScreen(isTab: true),
 
-            const _TabPage(title: 'Queue', icon: Icons.query_stats_rounded),
+            // ✅ QUEUE TAB (REAL PAGE)
+            LiveQueueView(
+              onGoToBooking: _goToBookingTab,
+            ),
 
+            // ✅ HISTORY TAB
             ChangeNotifierProvider(
               create: (_) => BookingHistoryViewModel(),
               child: const BookingHistoryScreen(),
             ),
 
-            const ProfileScreen(),
+            // ✅ PROFILE TAB
+            ChangeNotifierProvider(
+              create: (_) => ProfileViewModel(),
+              child: const ProfileScreen(),
+            ),
+
           ],
         ),
       ),
@@ -52,7 +98,7 @@ class _HomeScreenState extends State<HomeScreen> {
         type: BottomNavigationBarType.fixed,
         selectedItemColor: primary,
         unselectedItemColor: Colors.grey,
-        onTap: (index) => setState(() => _currentIndex = index), // ✅ just switch tab
+        onTap: _onTabTap,
         items: const [
           BottomNavigationBarItem(icon: Icon(Icons.home_filled), label: 'Home'),
           BottomNavigationBarItem(icon: Icon(Icons.event_note_rounded), label: 'Book'),
@@ -68,21 +114,26 @@ class _HomeScreenState extends State<HomeScreen> {
 class _HomeTab extends StatelessWidget {
   final Color primary;
   final VoidCallback onBook;
+  final VoidCallback onQueue;
 
   const _HomeTab({
     required this.primary,
     required this.onBook,
+    required this.onQueue,
   });
 
   @override
   Widget build(BuildContext context) {
+    final home = context.watch<HomeViewModel>();
+
     return Column(
       children: [
+        // Header
         Container(
           padding: const EdgeInsets.fromLTRB(24, 24, 24, 20),
           decoration: const BoxDecoration(
             gradient: LinearGradient(
-              colors: [Color(0xFF18C964), Color(0xFF11A94A)],
+              colors: [Color(0xFF65BF61), Color(0xFF4BAA47)],
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
             ),
@@ -97,55 +148,41 @@ class _HomeTab extends StatelessWidget {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Column(
+                  const Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
-                    children: const [
-                      Text(
-                        'Welcome back,',
-                        style: TextStyle(color: Colors.white70, fontSize: 14),
-                      ),
+                    children: [
+                      Text('Welcome back,', style: TextStyle(color: Colors.white70, fontSize: 14)),
                       SizedBox(height: 4),
                       Text(
-                        'Sujal Shrestha',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 20,
-                          fontWeight: FontWeight.w600,
-                        ),
+                        'User',
+                        style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w600),
                       ),
                     ],
                   ),
-                  Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.18),
-                      shape: BoxShape.circle,
-                    ),
-                    child: const Icon(
-                      Icons.notifications_none_rounded,
-                      color: Colors.white,
-                    ),
+                  IconButton(
+                    onPressed: () => context.read<HomeViewModel>().loadHome(),
+                    icon: const Icon(Icons.refresh, color: Colors.white),
                   ),
                 ],
               ),
               const SizedBox(height: 20),
               Row(
-                children: const [
+                children: [
                   _TopStatCard(
                     label: 'Appointments',
-                    value: '1',
+                    value: home.isLoading ? '...' : home.appointmentsCount.toString(),
                     icon: Icons.event_available_rounded,
                   ),
-                  SizedBox(width: 12),
+                  const SizedBox(width: 12),
                   _TopStatCard(
                     label: 'Queue Number',
-                    value: '12',
+                    value: home.isLoading ? '...' : home.queueNumber,
                     icon: Icons.confirmation_number_rounded,
                   ),
-                  SizedBox(width: 12),
+                  const SizedBox(width: 12),
                   _TopStatCard(
                     label: 'Est. Wait',
-                    value: '15 mins',
+                    value: home.isLoading ? '...' : home.estWait,
                     icon: Icons.access_time_rounded,
                   ),
                 ],
@@ -153,12 +190,24 @@ class _HomeTab extends StatelessWidget {
             ],
           ),
         ),
+
+        // Body
         Expanded(
           child: SingleChildScrollView(
             padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                if (home.error != null)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 10),
+                    child: Text(
+                      home.error!,
+                      style: const TextStyle(color: Colors.red, fontWeight: FontWeight.w600),
+                    ),
+                  ),
+
+                // Active booking card
                 Container(
                   padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
@@ -184,10 +233,10 @@ class _HomeTab extends StatelessWidget {
                               color: const Color(0xFFE6F9ED),
                               borderRadius: BorderRadius.circular(20),
                             ),
-                            child: const Text(
-                              'Active',
-                              style: TextStyle(
-                                color: Color(0xFF129C4A),
+                            child: Text(
+                              home.appointmentsCount > 0 ? 'Active' : 'No Booking',
+                              style: const TextStyle(
+                                color: Color(0xFF2E7D32),
                                 fontSize: 12,
                                 fontWeight: FontWeight.w600,
                               ),
@@ -198,27 +247,26 @@ class _HomeTab extends StatelessWidget {
                         ],
                       ),
                       const SizedBox(height: 12),
-                      const Text(
-                        'Dr. Emily Chen',
-                        style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
-                      ),
+
+                      Text(home.activeTitle, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600)),
                       const SizedBox(height: 2),
-                      const Text(
-                        'General Practitioner',
-                        style: TextStyle(color: Colors.grey, fontSize: 13),
-                      ),
-                      const SizedBox(height: 12),
-                      Row(
-                        children: const [
-                          Icon(Icons.calendar_today_outlined, size: 16, color: Colors.grey),
-                          SizedBox(width: 6),
-                          Text('Today', style: TextStyle(color: Colors.grey, fontSize: 13)),
-                          SizedBox(width: 16),
-                          Icon(Icons.access_time_rounded, size: 16, color: Colors.grey),
-                          SizedBox(width: 6),
-                          Text('2:30 PM', style: TextStyle(color: Colors.grey, fontSize: 13)),
-                        ],
-                      ),
+                      Text(home.activeSubtitle, style: const TextStyle(color: Colors.grey, fontSize: 13)),
+
+                      if (home.activeDateText.isNotEmpty || home.activeTimeText.isNotEmpty) ...[
+                        const SizedBox(height: 12),
+                        Row(
+                          children: [
+                            const Icon(Icons.calendar_today_outlined, size: 16, color: Colors.grey),
+                            const SizedBox(width: 6),
+                            Text(home.activeDateText, style: const TextStyle(color: Colors.grey, fontSize: 13)),
+                            const SizedBox(width: 16),
+                            const Icon(Icons.access_time_rounded, size: 16, color: Colors.grey),
+                            const SizedBox(width: 6),
+                            Text(home.activeTimeText, style: const TextStyle(color: Colors.grey, fontSize: 13)),
+                          ],
+                        ),
+                      ],
+
                       const SizedBox(height: 16),
                       Container(
                         padding: const EdgeInsets.all(12),
@@ -227,17 +275,14 @@ class _HomeTab extends StatelessWidget {
                           borderRadius: BorderRadius.circular(12),
                         ),
                         child: Row(
-                          children: const [
-                            Expanded(
-                              child: _QueueInfoItem(title: 'Your Queue Number', value: 'A-12'),
-                            ),
-                            SizedBox(width: 12),
-                            Expanded(
-                              child: _QueueInfoItem(title: 'People Ahead', value: '4'),
-                            ),
+                          children: [
+                            Expanded(child: _QueueInfoItem(title: 'Your Queue Number', value: home.queueNumber)),
+                            const SizedBox(width: 12),
+                            Expanded(child: _QueueInfoItem(title: 'People Ahead', value: home.peopleAhead)),
                           ],
                         ),
                       ),
+
                       const SizedBox(height: 12),
                       SizedBox(
                         width: double.infinity,
@@ -245,92 +290,33 @@ class _HomeTab extends StatelessWidget {
                         child: ElevatedButton(
                           style: ElevatedButton.styleFrom(
                             backgroundColor: primary,
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(10),
-                            ),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                           ),
-                          onPressed: () {},
-                          child: const Text('View Live Queue'),
+                          onPressed: home.appointmentsCount == 0 ? onBook : onQueue,
+                          child: Text(home.appointmentsCount == 0 ? 'Book Now' : 'View Live Queue'),
                         ),
                       ),
                     ],
                   ),
                 ),
+
                 const SizedBox(height: 24),
-                const Text(
-                  'Quick Actions',
-                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
-                ),
+                const Text('Quick Actions', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
                 const SizedBox(height: 12),
                 Row(
                   children: [
                     _QuickActionCard(
                       icon: Icons.event_available_rounded,
                       label: 'Book Appointment',
-                      onTap: onBook, // ✅ switches to tab 1
+                      onTap: onBook,
                     ),
                     const SizedBox(width: 12),
                     _QuickActionCard(
                       icon: Icons.query_stats_rounded,
                       label: 'Queue Status',
-                      onTap: () {},
+                      onTap: onQueue, // ✅ now works
                     ),
                   ],
-                ),
-              ],
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-class _TabPage extends StatelessWidget {
-  final String title;
-  final IconData icon;
-
-  const _TabPage({required this.title, required this.icon});
-
-  @override
-  Widget build(BuildContext context) {
-    final primary = Theme.of(context).primaryColor;
-
-    return Column(
-      children: [
-        Container(
-          width: double.infinity,
-          padding: const EdgeInsets.fromLTRB(24, 20, 24, 18),
-          decoration: const BoxDecoration(
-            gradient: LinearGradient(
-              colors: [Color(0xFF18C964), Color(0xFF11A94A)],
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-            ),
-            borderRadius: BorderRadius.only(
-              bottomLeft: Radius.circular(24),
-              bottomRight: Radius.circular(24),
-            ),
-          ),
-          child: Text(
-            title,
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 20,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-        ),
-        Expanded(
-          child: Center(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(icon, size: 58, color: primary),
-                const SizedBox(height: 10),
-                Text(
-                  '$title Page',
-                  style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
                 ),
               ],
             ),
@@ -362,19 +348,9 @@ class _TopStatCard extends StatelessWidget {
           children: [
             Icon(icon, color: Colors.white, size: 20),
             const SizedBox(height: 8),
-            Text(
-              value,
-              style: const TextStyle(
-                color: Colors.white,
-                fontSize: 18,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
+            Text(value, style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600)),
             const SizedBox(height: 2),
-            Text(
-              label,
-              style: const TextStyle(color: Colors.white70, fontSize: 11),
-            ),
+            Text(label, style: const TextStyle(color: Colors.white70, fontSize: 11)),
           ],
         ),
       ),
@@ -431,7 +407,7 @@ class _QuickActionCard extends StatelessWidget {
             ),
             child: Column(
               children: [
-                Icon(icon, color: Theme.of(context).primaryColor),
+                Icon(icon, color: const Color(0xFF65BF61)),
                 const SizedBox(height: 8),
                 Text(
                   label,
