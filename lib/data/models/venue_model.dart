@@ -1,20 +1,19 @@
-// lib/data/models/venue_model.dart
 class VenueModel {
   final String id;
   final String name;
-  final String logoUrl;
+  final String? logo; // filename like "hams.png"
 
   VenueModel({
     required this.id,
     required this.name,
-    required this.logoUrl,
+    this.logo,
   });
 
   factory VenueModel.fromJson(Map<String, dynamic> json) {
     return VenueModel(
       id: (json['_id'] ?? json['id'] ?? '').toString(),
       name: (json['name'] ?? '').toString(),
-      logoUrl: (json['logoUrl'] ?? '').toString(),
+      logo: json['logo']?.toString(),
     );
   }
 }
