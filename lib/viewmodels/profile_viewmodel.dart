@@ -1,86 +1,147 @@
-import 'package:flutter/material.dart';
-import 'package:queless_app/data/services/api_service.dart';
-import '../data/models/profile_model.dart';
+import 'package:flutter/foundation.dart';
+import '../data/services/api_service.dart';
 
 class ProfileViewModel extends ChangeNotifier {
-  bool isLoading = false;
-  String? error;
-  ProfileModel? profile;
+  bool _loading = false;
+  String? _error;
 
-  Future<void> loadProfile() async {
-    isLoading = true;
-    error = null;
+  bool get loading => _loading;
+  String? get error => _error;
+
+  // Profile fields
+  String name = '';
+  String username = '';
+  String role = '';
+  String email = '';
+  String phone = '';
+  String address = '';
+  String memberSince = '—';
+
+  // Stats (from bookings)
+  int visits = 0;
+  int upcoming = 0;
+  double avgRating = 0.0;
+
+  Future<void> load() async {
+    _loading = true;
+    _error = null;
     notifyListeners();
 
-    final res = await ApiService.fetchProfile();
+    try {
+      // 1) profile
+      final profileRes = await ApiService.fetchProfile();
+      if (profileRes['success'] != true) {
+        _error = profileRes['message']?.toString() ?? 'Failed to load profile';
+        _loading = false;
+        notifyListeners();
+        return;
+      }
 
-    isLoading = false;
+      final data = profileRes['data'];
+      if (data is Map) {
+        name = (data['name'] ?? '').toString();
+        username = (data['username'] ?? '').toString();
+        role = (data['role'] ?? '').toString();
+        email = (data['email'] ?? '').toString();
+        phone = (data['phone'] ?? '').toString();
+        address = (data['address'] ?? '').toString();
 
-    if (res['success'] == true) {
-      profile = ProfileModel.fromJson(res['data'] as Map<String, dynamic>);
+        final createdAtRaw = data['createdAt'];
+        final dt = createdAtRaw != null ? DateTime.tryParse(createdAtRaw.toString()) : null;
+        if (dt != null) {
+          memberSince = "${_monthName(dt.month)} ${dt.year}";
+        } else {
+          memberSince = "—";
+        }
+      }
+
+      // 2) stats from bookings
+      final bookingsRes = await ApiService.fetchMyBookings();
+      if (bookingsRes['success'] == true) {
+        final list = bookingsRes['data'];
+        if (list is List) {
+          int v = 0;
+          int u = 0;
+          double sum = 0;
+          int count = 0;
+
+          for (final b in list) {
+            if (b is Map) {
+              final status = (b['status'] ?? '').toString().toLowerCase().trim();
+              if (status == 'completed') v++;
+              if (status == 'upcoming') u++;
+
+              // optional rating keys (won’t break if not in backend)
+              final r = b['rating'] ?? b['reviewRating'] ?? b['stars'];
+              final rating = (r is num) ? r.toDouble() : double.tryParse(r?.toString() ?? '');
+              if (rating != null && rating > 0) {
+                sum += rating;
+                count++;
+              }
+            }
+          }
+
+          visits = v;
+          upcoming = u;
+          avgRating = count == 0 ? 0.0 : (sum / count);
+        }
+      }
+    } catch (e) {
+      _error = e.toString();
+    } finally {
+      _loading = false;
       notifyListeners();
-      return;
     }
-
-    error = (res['message'] ?? 'Failed to load profile').toString();
-    notifyListeners();
   }
 
-  Future<bool> updateProfile({
+  Future<String?> updateMyProfile({
     required String name,
     required String email,
     required String phone,
+    required String address,
   }) async {
-    isLoading = true;
-    error = null;
-    notifyListeners();
-
     final res = await ApiService.updateProfile(
       name: name,
       email: email,
       phone: phone,
+      address: address,
     );
 
-    isLoading = false;
-
     if (res['success'] == true) {
-      final updated = ProfileModel.fromJson(res['data'] as Map<String, dynamic>);
-      profile = updated;
-      notifyListeners();
-      return true;
+      await load();
+      return null;
     }
-
-    error = (res['message'] ?? 'Update failed').toString();
-    notifyListeners();
-    return false;
+    return res['message']?.toString() ?? 'Update failed';
   }
 
-  Future<bool> changePassword({
+  Future<String?> changeMyPassword({
     required String currentPassword,
     required String newPassword,
   }) async {
-    isLoading = true;
-    error = null;
-    notifyListeners();
-
     final res = await ApiService.changePassword(
       currentPassword: currentPassword,
       newPassword: newPassword,
     );
 
-    isLoading = false;
+    if (res['success'] == true) return null;
+    return res['message']?.toString() ?? 'Password change failed';
+  }
 
-    if (res['success'] == true) {
-      notifyListeners();
-      return true;
-    }
-
-    error = (res['message'] ?? 'Password change failed').toString();
-    notifyListeners();
-    return false;
+  Future<String?> deleteMyAccount() async {
+    final res = await ApiService.deleteAccount();
+    if (res['success'] == true) return null;
+    return res['message']?.toString() ?? 'Delete failed';
   }
 
   Future<void> logout() async {
     await ApiService.logout();
+  }
+
+  String _monthName(int m) {
+    const months = [
+      "Jan","Feb","Mar","Apr","May","Jun",
+      "Jul","Aug","Sep","Oct","Nov","Dec"
+    ];
+    return (m >= 1 && m <= 12) ? months[m - 1] : "—";
   }
 }
