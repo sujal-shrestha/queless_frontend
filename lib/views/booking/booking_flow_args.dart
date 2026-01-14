@@ -41,11 +41,15 @@ class BookingConfirmedArgs {
   final DateTime date;
   final String timeLabel;
 
-  const BookingConfirmedArgs({
+  // ✅ NEW: used for QR
+  final String ticketToken;
+
+  BookingConfirmedArgs({
     required this.queueNumber,
     required this.venueName,
     required this.branchName,
     required this.date,
     required this.timeLabel,
+    required this.ticketToken,
   });
 }
