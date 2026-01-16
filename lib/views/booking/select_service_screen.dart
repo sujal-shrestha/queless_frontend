@@ -108,7 +108,32 @@ class _SelectServiceScreenState extends State<SelectServiceScreen> {
       context.read<VenueViewModel>().loadVenues(search: v);
     });
   }
+Future<void> _pickVenueAndContinue() async {
+  if (_venueId == null || _venueName == null) return;
 
+  setState(() => _step = 1); // go to Branch step
+  await _loadBranchesForVenue(_venueId!!);
+
+  // if only 1 branch, _loadBranchesForVenue auto-jumps to step 2
+}
+
+void _pickBranchAndContinue() {
+  if (_branchId == null || _branchName == null) return;
+  _nextStep(); // go to Date step
+}
+
+void _pickDateAndContinue() {
+  // normalize date (remove time)
+  setState(() {
+    _selectedDate = DateTime(_selectedDate.year, _selectedDate.month, _selectedDate.day);
+    _focusedDay = _selectedDate;
+
+    // optional: reset time when date changes
+    _selectedTime = null;
+  });
+
+  _nextStep(); // go to Time step
+}
   void _nextStep() {
     if (_step < 4) setState(() => _step++);
   }
@@ -121,86 +146,78 @@ class _SelectServiceScreenState extends State<SelectServiceScreen> {
   // ✅ BRANCHES (dynamic per venue)
   // =========================
   Future<void> _loadBranchesForVenue(String venueId) async {
-    setState(() {
-      _branchesLoading = true;
-      _branchesError = null;
-      _branches = [];
-      _branchId = null;
-      _branchName = null;
-    });
+  setState(() {
+    _branchesLoading = true;
+    _branchesError = null;
+    _branches = [];
+    _branchId = null;
+    _branchName = null;
+  });
 
-    try {
-      final url = Uri.parse('${ApiService.baseUrl}/api/venues/$venueId/branches');
-      final res = await http.get(url, headers: const {'Accept': 'application/json'}).timeout(
-            const Duration(seconds: 12),
-          );
-
-      dynamic parsed;
-      try {
-        parsed = jsonDecode(res.body);
-      } catch (_) {
-        parsed = res.body;
-      }
-
-      if (res.statusCode < 200 || res.statusCode >= 300) {
-        setState(() {
-          _branchesError = (parsed is Map && parsed['message'] != null)
-              ? parsed['message'].toString()
-              : 'Failed to load branches (${res.statusCode})';
-        });
-        return;
-      }
-
-      // Accept:
-      // 1) { branches: [ ... ] }
-      // 2) { data: [ ... ] }
-      // 3) [ ... ]
-      List list = [];
-      if (parsed is Map && parsed['branches'] is List) list = parsed['branches'];
-      if (parsed is Map && parsed['data'] is List) list = parsed['data'];
-      if (parsed is List) list = parsed;
-
-      final items = list
-          .where((e) => e is Map)
-          .map((e) => _BranchItem.fromJson(Map<String, dynamic>.from(e as Map)))
-          .toList();
-
-      setState(() => _branches = items);
-
-      // ✅ If only ONE branch, auto select and skip step
-      if (items.length == 1) {
-        setState(() {
-          _branchId = items.first.id;
-          _branchName = items.first.name;
-          _step = 2; // skip branch step
-        });
-      }
-    } catch (e) {
-      setState(() => _branchesError = 'Network error: $e');
-    } finally {
-      if (mounted) setState(() => _branchesLoading = false);
+  try {
+    final token = await ApiService.getToken(); // ✅ get saved token
+    if (token == null || token.isEmpty) {
+      setState(() {
+        _branchesError = 'Not authorized, no token';
+      });
+      return;
     }
+
+    final url = Uri.parse('${ApiService.baseUrl}/api/venues/$venueId/branches');
+
+    final res = await http.get(
+      url,
+      headers: {
+        'Accept': 'application/json',
+        'Authorization': 'Bearer $token', // ✅ add token
+      },
+    ).timeout(const Duration(seconds: 12));
+
+    dynamic parsed;
+    try {
+      parsed = jsonDecode(res.body);
+    } catch (_) {
+      parsed = res.body;
+    }
+
+    print('[BRANCHES] ${res.statusCode} -> $parsed');
+
+    if (res.statusCode < 200 || res.statusCode >= 300) {
+      setState(() {
+        _branchesError = (parsed is Map && parsed['message'] != null)
+            ? parsed['message'].toString()
+            : 'Failed to load branches (${res.statusCode})';
+      });
+      return;
+    }
+
+    List list = [];
+    if (parsed is Map && parsed['branches'] is List) list = parsed['branches'];
+    if (parsed is Map && parsed['data'] is List) list = parsed['data'];
+    if (parsed is List) list = parsed;
+
+    final items = list
+        .where((e) => e is Map)
+        .map((e) => _BranchItem.fromJson(Map<String, dynamic>.from(e as Map)))
+        .toList();
+
+    setState(() => _branches = items);
+
+    // ✅ If only ONE branch, auto select and skip step
+    if (items.length == 1) {
+      setState(() {
+        _branchId = items.first.id;
+        _branchName = items.first.name;
+        _step = 2;
+      });
+    }
+  } catch (e) {
+    setState(() => _branchesError = 'Network error: $e');
+  } finally {
+    if (mounted) setState(() => _branchesLoading = false);
   }
+}
 
-  Future<void> _pickVenueAndContinue() async {
-    if (_venueId == null || _venueName == null) return;
-
-    setState(() => _step = 1);
-    await _loadBranchesForVenue(_venueId!);
-
-    // If branches auto-selected, we already moved to step 2
-  }
-
-  void _pickBranchAndContinue() {
-    if (_branchId == null || _branchName == null) return;
-    _nextStep();
-  }
-
-  void _pickDateAndContinue() {
-    _selectedDate = DateTime(_selectedDate.year, _selectedDate.month, _selectedDate.day);
-    _focusedDay = _selectedDate;
-    _nextStep();
-  }
 
   // -------------------------
   // TIME PARSING -> scheduledAt
