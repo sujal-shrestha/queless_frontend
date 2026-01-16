@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import '../../data/services/api_service.dart';
 
+// ✅ Staff queue screen (direct)
+import '../admin/admin_queue_view.dart';
+
 class AuthScreen extends StatefulWidget {
   const AuthScreen({super.key});
 
@@ -9,7 +12,7 @@ class AuthScreen extends StatefulWidget {
 }
 
 class _AuthScreenState extends State<AuthScreen> {
-  bool isStaff = false; // false = User, true = Staff
+  bool isStaff = false;
 
   final _userFormKey = GlobalKey<FormState>();
   final _staffFormKey = GlobalKey<FormState>();
@@ -62,6 +65,63 @@ class _AuthScreenState extends State<AuthScreen> {
     return null;
   }
 
+  /// Supports:
+  /// result['data']['user']['branchId']
+  /// result['data']['user']['branch']
+  String? _extractBranchId(Map<String, dynamic> result) {
+    final data = result['data'];
+    if (data is Map) {
+      final user = data['user'];
+      if (user is Map) {
+        final b1 = user['branchId'];
+        final b2 = user['branch'];
+        final raw = (b1 ?? b2);
+
+        if (raw == null) return null;
+
+        final id = raw.toString().trim();
+        if (id.isEmpty || id.toLowerCase() == 'null') return null;
+
+        return id;
+      }
+    }
+    return null;
+  }
+
+  /// Optional nice-to-have if backend returns it:
+  /// result['data']['user']['branchName']
+  String _extractBranchName(Map<String, dynamic> result) {
+    final data = result['data'];
+    if (data is Map) {
+      final user = data['user'];
+      if (user is Map) {
+        final name = user['branchName'];
+        if (name != null) {
+          final s = name.toString().trim();
+          if (s.isNotEmpty && s.toLowerCase() != 'null') return s;
+        }
+      }
+    }
+    return "My Branch";
+  }
+
+  /// Optional nice-to-have if backend returns it:
+  /// result['data']['user']['venueName']
+  String _extractVenueName(Map<String, dynamic> result) {
+    final data = result['data'];
+    if (data is Map) {
+      final user = data['user'];
+      if (user is Map) {
+        final name = user['venueName'];
+        if (name != null) {
+          final s = name.toString().trim();
+          if (s.isNotEmpty && s.toLowerCase() != 'null') return s;
+        }
+      }
+    }
+    return "My Venue";
+  }
+
   Future<void> _onLogin() async {
     final formKey = isStaff ? _staffFormKey : _userFormKey;
     if (!formKey.currentState!.validate()) return;
@@ -75,24 +135,52 @@ class _AuthScreenState extends State<AuthScreen> {
     final password = isStaff ? _staffPasswordController.text.trim() : _userPasswordController.text.trim();
     final role = isStaff ? 'staff' : 'user';
 
-    Map<String, dynamic> result = {};
-
     try {
       debugPrint('LOGIN -> role=$role id=$id');
-      result = await ApiService.login(id: id, password: password, role: role);
+      final result = await ApiService.login(id: id, password: password, role: role);
       debugPrint('LOGIN RESPONSE -> $result');
 
       if (!mounted) return;
 
       if (result['success'] == true) {
         setState(() => _errorText = null);
-        Navigator.pushReplacementNamed(context, '/home');
+
+        if (isStaff) {
+          // ✅ Staff should NOT pick venue/branch.
+          // They must be assigned to one branch by developer/admin.
+          final branchId = _extractBranchId(result);
+
+          if (branchId == null || branchId.isEmpty) {
+            const msg = "Staff is not assigned to a branch. Contact admin.";
+            setState(() => _errorText = msg);
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text(msg), behavior: SnackBarBehavior.floating),
+            );
+            return;
+          }
+
+          final branchName = _extractBranchName(result);
+          final venueName = _extractVenueName(result);
+
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(
+              builder: (_) => AdminQueueView(
+                branchId: branchId,
+                branchName: branchName,
+                venueName: venueName, // ✅ NEW
+              ),
+            ),
+          );
+        } else {
+          Navigator.pushReplacementNamed(context, '/home');
+        }
       } else {
         final msg = (result['message'] ?? 'Login failed').toString();
         setState(() => _errorText = msg);
 
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(msg)),
+          SnackBar(content: Text(msg), behavior: SnackBarBehavior.floating),
         );
       }
     } catch (e, st) {
@@ -101,18 +189,13 @@ class _AuthScreenState extends State<AuthScreen> {
 
       if (!mounted) return;
 
-      setState(() {
-        _errorText = 'Login error: $e';
-      });
+      setState(() => _errorText = 'Login error: $e');
 
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Login error: $e')),
+        SnackBar(content: Text('Login error: $e'), behavior: SnackBarBehavior.floating),
       );
     } finally {
-      // ✅ ALWAYS stop loading no matter what happens
-      if (mounted) {
-        setState(() => _isLoading = false);
-      }
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
@@ -263,13 +346,10 @@ class _AuthScreenState extends State<AuthScreen> {
                       ),
                       const SizedBox(height: 4),
                       Text(
-                        isStaff
-                            ? 'Enter your staff ID to access QUELESS'
-                            : 'Enter your student ID to access Queless',
+                        isStaff ? 'Enter your staff ID to access QUELESS' : 'Enter your student ID to access Queless',
                         style: const TextStyle(color: Colors.grey, fontSize: 13),
                       ),
                       const SizedBox(height: 16),
-
                       if (_errorText != null) ...[
                         Container(
                           padding: const EdgeInsets.all(12),
@@ -289,13 +369,13 @@ class _AuthScreenState extends State<AuthScreen> {
                         ),
                         const SizedBox(height: 16),
                       ],
-
                       Form(
                         key: isStaff ? _staffFormKey : _userFormKey,
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: [
-                            Text(isStaff ? 'Staff ID' : 'User ID', style: const TextStyle(fontSize: 13)),
+                            Text(isStaff ? 'Staff ID' : 'User ID',
+                                style: const TextStyle(fontSize: 13)),
                             const SizedBox(height: 6),
                             TextFormField(
                               controller: isStaff ? _staffIdController : _userIdController,
@@ -346,23 +426,25 @@ class _AuthScreenState extends State<AuthScreen> {
                         ),
                       ),
                       const SizedBox(height: 16),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          const Text("Don't have an account? ", style: TextStyle(fontSize: 13)),
-                          GestureDetector(
-                            onTap: () => Navigator.pushNamed(context, '/signup'),
-                            child: Text(
-                              'Sign up',
-                              style: TextStyle(
-                                color: primary,
-                                fontWeight: FontWeight.w600,
-                                fontSize: 13,
+                      if (!isStaff)
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            const Text("Don't have an account? ",
+                                style: TextStyle(fontSize: 13)),
+                            GestureDetector(
+                              onTap: () => Navigator.pushNamed(context, '/signup'),
+                              child: Text(
+                                'Sign up',
+                                style: TextStyle(
+                                  color: primary,
+                                  fontWeight: FontWeight.w600,
+                                  fontSize: 13,
+                                ),
                               ),
                             ),
-                          ),
-                        ],
-                      ),
+                          ],
+                        ),
                       const SizedBox(height: 16),
                       const Text(
                         'Need help? Contact support@queless.com',
