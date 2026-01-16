@@ -246,49 +246,68 @@ class ApiService {
   }
 
   static Future<Map<String, dynamic>> updateProfile({
-    required String name,
-    required String email,
-    String? phone,
-    String? address,
-  }) async {
-    final token = await getToken();
-    if (token == null || token.isEmpty) return {'success': false, 'message': 'Not logged in'};
+  required String name,
+  required String email,
+  String? phone,
+  String? address,
 
-    final url = Uri.parse('$baseUrl/api/auth/profile');
-
-    try {
-      final res = await http
-          .patch(
-            url,
-            headers: await _authHeaders(),
-            body: jsonEncode({
-              'name': name,
-              'email': email,
-              'phone': phone ?? '',
-              'address': address ?? '',
-            }),
-          )
-          .timeout(_timeout);
-
-      final parsed = _decode(res);
-      print('[PROFILE PATCH] ${res.statusCode} -> $parsed');
-
-      if (_isOk(res.statusCode)) {
-        return {'success': true, 'data': _unwrapData(parsed), 'statusCode': res.statusCode};
-      }
-
-      return {
-        'success': false,
-        'message': _extractMessage(parsed) ?? 'Update failed (${res.statusCode})',
-        'data': parsed,
-        'statusCode': res.statusCode,
-      };
-    } on TimeoutException {
-      return {'success': false, 'message': 'Request timed out'};
-    } catch (e) {
-      return {'success': false, 'message': 'Network error: $e'};
-    }
+  // ✅ Optional: send profile image as either:
+  // 1) a base64 string (recommended for your current setup), OR
+  // 2) an already-hosted image URL
+  String? profileImageBase64,
+  String? profileImageUrl,
+}) async {
+  final token = await getToken();
+  if (token == null || token.isEmpty) {
+    return {'success': false, 'message': 'Not logged in'};
   }
+
+  final url = Uri.parse('$baseUrl/api/auth/profile');
+
+  try {
+    final body = <String, dynamic>{
+      'name': name,
+      'email': email,
+      'phone': phone ?? '',
+      'address': address ?? '',
+    };
+
+    // ✅ Only include image fields if provided (prevents breaking older backends)
+    if (profileImageBase64 != null && profileImageBase64.trim().isNotEmpty) {
+      body['profileImageBase64'] = profileImageBase64.trim();
+    }
+    if (profileImageUrl != null && profileImageUrl.trim().isNotEmpty) {
+      body['profileImageUrl'] = profileImageUrl.trim();
+    }
+
+    final res = await http
+        .patch(
+          url,
+          headers: await _authHeaders(),
+          body: jsonEncode(body),
+        )
+        .timeout(_timeout);
+
+    final parsed = _decode(res);
+    print('[PROFILE PATCH] ${res.statusCode} -> $parsed');
+
+    if (_isOk(res.statusCode)) {
+      return {'success': true, 'data': _unwrapData(parsed), 'statusCode': res.statusCode};
+    }
+
+    return {
+      'success': false,
+      'message': _extractMessage(parsed) ?? 'Update failed (${res.statusCode})',
+      'data': parsed,
+      'statusCode': res.statusCode,
+    };
+  } on TimeoutException {
+    return {'success': false, 'message': 'Request timed out'};
+  } catch (e) {
+    return {'success': false, 'message': 'Network error: $e'};
+  }
+}
+
 
   static Future<Map<String, dynamic>> changePassword({
     required String currentPassword,

@@ -7,10 +7,13 @@ class BookingHistoryItem {
   final DateTime dateTime;
   final String status; // upcoming | completed | cancelled
 
-  // Optional fields (won’t break old cache)
+  // Optional fields
   final String ticketToken;
   final String queueNumber;
   final String branchName;
+
+  // ✅ Helpful for debugging (optional)
+  final bool hasValidDate;
 
   const BookingHistoryItem({
     required this.id,
@@ -21,15 +24,14 @@ class BookingHistoryItem {
     this.ticketToken = "",
     this.queueNumber = "",
     this.branchName = "",
+    this.hasValidDate = true,
   });
 
   factory BookingHistoryItem.fromJson(Map<String, dynamic> json) {
-    // ✅ backend usually uses _id; cache uses id
     final id = (json['_id'] ?? json['id'] ?? '').toString();
-
     final title = (json['title'] ?? '').toString();
 
-    // ✅ organizationName might be missing; try venue.name
+    // Organization name fallback
     String org = (json['organizationName'] ?? '').toString();
     if (org.trim().isEmpty) {
       final venue = json['venue'];
@@ -39,14 +41,22 @@ class BookingHistoryItem {
     }
     if (org.trim().isEmpty) org = "—";
 
-    // ✅ accept BOTH cache key "dateTime" and API keys like "scheduledAt"
-    final dt = _parseAnyDate(
-          json['dateTime'] ??
-              json['scheduledAt'] ??
-              json['createdAt'] ??
-              json['updatedAt'],
-        ) ??
-        DateTime.now();
+    // ✅ Prefer real booking time fields first
+    final rawDate =
+        json['dateTime'] ??
+        json['scheduledAt'] ??
+        json['scheduledDate'] ??
+        json['bookingDate'] ??
+        json['date'] ??
+        json['startTime'] ??
+        json['time'] ??
+        json['slotTime'] ??
+        json['createdAt']; // keep last (not ideal but better than null)
+
+    final parsed = _parseAnyDate(rawDate);
+
+    // ✅ If missing/invalid date, DON'T silently use now (it breaks sorting & expiry logic)
+    final safeDate = parsed ?? DateTime.fromMillisecondsSinceEpoch(0);
 
     final status = (json['status'] ?? 'upcoming').toString();
 
@@ -54,18 +64,18 @@ class BookingHistoryItem {
       id: id,
       title: title,
       organizationName: org,
-      dateTime: dt,
+      dateTime: safeDate,
       status: status,
+      hasValidDate: parsed != null,
       ticketToken: (json['ticketToken'] ?? '').toString(),
       queueNumber: (json['queueNumber'] ?? '').toString(),
       branchName: (json['branchName'] ?? '').toString(),
     );
   }
 
-  /// ✅ this is what we store in SharedPreferences
   Map<String, dynamic> toJson() {
     return {
-      'id': id, // cache stores id (not _id) to keep it clean
+      'id': id,
       'title': title,
       'organizationName': organizationName,
       'dateTime': dateTime.toIso8601String(),
@@ -73,15 +83,14 @@ class BookingHistoryItem {
       'ticketToken': ticketToken,
       'queueNumber': queueNumber,
       'branchName': branchName,
+      'hasValidDate': hasValidDate,
     };
   }
 
-  /// ✅ very flexible date parser (prevents "FormatException: Invalid date format")
   static DateTime? _parseAnyDate(dynamic value) {
     if (value == null) return null;
     if (value is DateTime) return value;
 
-    // unix timestamp support
     if (value is int) {
       // milliseconds
       if (value > 1000000000000) {
@@ -94,11 +103,10 @@ class BookingHistoryItem {
     final s = value.toString().trim();
     if (s.isEmpty) return null;
 
-    // ISO parse
     final iso = DateTime.tryParse(s);
     if (iso != null) return iso;
 
-    // sometimes comes like "YYYY-MM-DD HH:mm:ss"
+    // sometimes: "YYYY-MM-DD HH:mm:ss"
     final cleaned = s.replaceAll(' ', 'T');
     return DateTime.tryParse(cleaned);
   }

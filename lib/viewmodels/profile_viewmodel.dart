@@ -17,7 +17,11 @@ class ProfileViewModel extends ChangeNotifier {
   String address = '';
   String memberSince = '—';
 
-  // Stats (from bookings)
+  // Profile image (optional)
+  String profileImageUrl = '';
+  bool get hasProfileImage => profileImageUrl.trim().isNotEmpty;
+
+  // Stats (optional; derived from bookings if available)
   int visits = 0;
   int upcoming = 0;
   double avgRating = 0.0;
@@ -28,12 +32,13 @@ class ProfileViewModel extends ChangeNotifier {
     notifyListeners();
 
     try {
-      // 1) profile
+      // 1) Profile
       final profileRes = await ApiService.fetchProfile();
-      if (profileRes['success'] != true) {
-        _error = profileRes['message']?.toString() ?? 'Failed to load profile';
-        _loading = false;
-        notifyListeners();
+
+      if (profileRes is! Map || profileRes['success'] != true) {
+        _error = profileRes is Map
+            ? (profileRes['message']?.toString() ?? 'Failed to load profile')
+            : 'Failed to load profile';
         return;
       }
 
@@ -46,18 +51,30 @@ class ProfileViewModel extends ChangeNotifier {
         phone = (data['phone'] ?? '').toString();
         address = (data['address'] ?? '').toString();
 
-        final createdAtRaw = data['createdAt'];
+        // Try multiple possible keys for image
+        final imgRaw = data['profileImage'] ??
+            data['profilePic'] ??
+            data['avatar'] ??
+            data['photo'] ??
+            data['imageUrl'] ??
+            data['profileImageUrl'];
+
+        profileImageUrl = (imgRaw ?? '').toString().trim();
+
+        // Member since
+        final createdAtRaw = data['createdAt'] ?? data['created_at'];
         final dt = createdAtRaw != null ? DateTime.tryParse(createdAtRaw.toString()) : null;
-        if (dt != null) {
-          memberSince = "${_monthName(dt.month)} ${dt.year}";
-        } else {
-          memberSince = "—";
-        }
+        memberSince = dt != null ? "${_monthName(dt.month)} ${dt.year}" : "—";
       }
 
-      // 2) stats from bookings
+      // 2) Stats from bookings (safe / optional)
+      visits = 0;
+      upcoming = 0;
+      avgRating = 0.0;
+
       final bookingsRes = await ApiService.fetchMyBookings();
-      if (bookingsRes['success'] == true) {
+
+      if (bookingsRes is Map && bookingsRes['success'] == true) {
         final list = bookingsRes['data'];
         if (list is List) {
           int v = 0;
@@ -68,10 +85,12 @@ class ProfileViewModel extends ChangeNotifier {
           for (final b in list) {
             if (b is Map) {
               final status = (b['status'] ?? '').toString().toLowerCase().trim();
+
+              // keep these safe—if backend uses different words, it simply won't count
               if (status == 'completed') v++;
               if (status == 'upcoming') u++;
 
-              // optional rating keys (won’t break if not in backend)
+              // Optional rating (won’t break if missing)
               final r = b['rating'] ?? b['reviewRating'] ?? b['stars'];
               final rating = (r is num) ? r.toDouble() : double.tryParse(r?.toString() ?? '');
               if (rating != null && rating > 0) {
@@ -99,19 +118,22 @@ class ProfileViewModel extends ChangeNotifier {
     required String email,
     required String phone,
     required String address,
+    String? profileImageUrl, // optional: if you support updating it later
   }) async {
     final res = await ApiService.updateProfile(
       name: name,
       email: email,
       phone: phone,
       address: address,
+      // If your ApiService.updateProfile doesn't support this yet, REMOVE this line.
+      profileImageUrl: profileImageUrl,
     );
 
-    if (res['success'] == true) {
+    if (res is Map && res['success'] == true) {
       await load();
       return null;
     }
-    return res['message']?.toString() ?? 'Update failed';
+    return (res is Map ? res['message']?.toString() : null) ?? 'Update failed';
   }
 
   Future<String?> changeMyPassword({
@@ -123,14 +145,14 @@ class ProfileViewModel extends ChangeNotifier {
       newPassword: newPassword,
     );
 
-    if (res['success'] == true) return null;
-    return res['message']?.toString() ?? 'Password change failed';
+    if (res is Map && res['success'] == true) return null;
+    return (res is Map ? res['message']?.toString() : null) ?? 'Password change failed';
   }
 
   Future<String?> deleteMyAccount() async {
     final res = await ApiService.deleteAccount();
-    if (res['success'] == true) return null;
-    return res['message']?.toString() ?? 'Delete failed';
+    if (res is Map && res['success'] == true) return null;
+    return (res is Map ? res['message']?.toString() : null) ?? 'Delete failed';
   }
 
   Future<void> logout() async {
@@ -138,10 +160,7 @@ class ProfileViewModel extends ChangeNotifier {
   }
 
   String _monthName(int m) {
-    const months = [
-      "Jan","Feb","Mar","Apr","May","Jun",
-      "Jul","Aug","Sep","Oct","Nov","Dec"
-    ];
+    const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
     return (m >= 1 && m <= 12) ? months[m - 1] : "—";
   }
 }

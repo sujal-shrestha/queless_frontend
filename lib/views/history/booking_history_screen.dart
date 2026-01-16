@@ -14,7 +14,6 @@ import '../../viewmodels/booking_history_viewmodel.dart';
 import '../../data/models/booking_history_item.dart';
 import '../../data/services/api_service.dart';
 
-
 class BookingHistoryScreen extends StatefulWidget {
   const BookingHistoryScreen({super.key});
 
@@ -31,8 +30,10 @@ class _BookingHistoryScreenState extends State<BookingHistoryScreen> {
     Future.microtask(() => context.read<BookingHistoryViewModel>().loadHistory());
   }
 
+  bool _isExpired(DateTime dt) => dt.isBefore(DateTime.now());
+
   // =========================
-  // ✅ TICKET CAPTURE / SHARE / SAVE (reused)
+  // ✅ TICKET CAPTURE / SHARE / SAVE
   // =========================
   Future<Uint8List?> _capturePng(GlobalKey key) async {
     try {
@@ -95,14 +96,18 @@ class _BookingHistoryScreenState extends State<BookingHistoryScreen> {
   // ✅ UPCOMING: Show QR + Save/Share
   // =========================
   Future<void> _openUpcomingTicket(BookingHistoryItem item) async {
-    // If your list endpoint doesn’t include ticketToken, you can fetch details here by bookingId.
-    // For now we’ll try from item.ticketToken first:
+    // Prevent opening ticket for expired booking (should be in past, but extra safety)
+    if (_isExpired(item.dateTime)) {
+      _snack("This booking is in the past. You can review it instead.");
+      return;
+    }
+
     String token = item.ticketToken;
 
-    // ✅ Optional: If token missing, try fetching booking details
     if (token.trim().isEmpty) {
+      // Optional: fetch details by ID if your API supports it
       try {
-        final res = await ApiService.fetchBookingById(item.id); // we’ll add this below
+        final res = await ApiService.fetchBookingById(item.id);
         if (res['success'] == true) {
           final data = res['data'];
           if (data is Map && data['ticketToken'] != null) {
@@ -215,6 +220,11 @@ class _BookingHistoryScreenState extends State<BookingHistoryScreen> {
   // ✅ PAST: Rate + Review
   // =========================
   Future<void> _openPastReview(BookingHistoryItem item) async {
+    if (!_isExpired(item.dateTime)) {
+      _snack("You can review after the booking is completed.");
+      return;
+    }
+
     int rating = 0;
     final controller = TextEditingController();
     bool sending = false;
@@ -238,19 +248,24 @@ class _BookingHistoryScreenState extends State<BookingHistoryScreen> {
               }
               setSheet(() => sending = true);
 
-              final res = await ApiService.submitBookingReview(
-                bookingId: item.id,
-                rating: rating,
-                review: controller.text.trim(),
-              );
+              try {
+                final res = await ApiService.submitBookingReview(
+                  bookingId: item.id,
+                  rating: rating,
+                  review: controller.text.trim(),
+                );
 
-              setSheet(() => sending = false);
+                setSheet(() => sending = false);
 
-              if (res['success'] == true) {
-                Navigator.pop(context);
-                _snack("Thanks! Review submitted ✅");
-              } else {
-                _snack((res['message'] ?? "Failed to submit review").toString());
+                if (res is Map && res['success'] == true) {
+                  Navigator.pop(context);
+                  _snack("Thanks! Review submitted ✅");
+                } else {
+                  _snack((res is Map ? res['message'] : null)?.toString() ?? "Review feature not available yet.");
+                }
+              } catch (e) {
+                setSheet(() => sending = false);
+                _snack("Failed to submit review: $e");
               }
             }
 
@@ -394,12 +409,12 @@ class _BookingHistoryScreenState extends State<BookingHistoryScreen> {
                         _HistoryList(
                           items: vm.past,
                           emptyText: "No past visits yet.",
-                          onTap: (item) => _openPastReview(item),
+                          onTap: _openPastReview,
                         ),
                         _HistoryList(
                           items: vm.upcoming,
                           emptyText: "No upcoming bookings.",
-                          onTap: (item) => _openUpcomingTicket(item),
+                          onTap: _openUpcomingTicket,
                         ),
                       ],
                     );
@@ -444,9 +459,12 @@ class _HistoryCard extends StatelessWidget {
 
   const _HistoryCard({required this.item, required this.onTap});
 
+  bool get isExpired => item.dateTime.isBefore(DateTime.now());
+
   @override
   Widget build(BuildContext context) {
-    final status = item.status.toLowerCase();
+    // ✅ status badge determined by date (not backend)
+    final status = isExpired ? "past" : "upcoming";
     final badge = _badgeStyle(status);
 
     return InkWell(
@@ -497,11 +515,8 @@ class _HistoryCard extends StatelessWidget {
   switch (status) {
     case "upcoming":
       return (bg: const Color(0x1AFFC107), fg: const Color(0xFF8D6E00));
-    case "completed":
+    case "past":
       return (bg: const Color(0x1A4CAF50), fg: const Color(0xFF2E7D32));
-    case "cancelled":
-    case "canceled":
-      return (bg: const Color(0x1AF44336), fg: const Color(0xFFC62828));
     default:
       return (bg: const Color(0x1A9E9E9E), fg: const Color(0xFF616161));
   }
