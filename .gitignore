@@ -43,3 +43,11 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+
+# Local IDE
+.vscode/
+
+# Build outputs
+android/build/
+build/
+.dart_tool/
